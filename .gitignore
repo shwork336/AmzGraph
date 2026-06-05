@@ -12,6 +12,7 @@
 
 # Package Files #
 *.jar
+!**/gradle/wrapper/gradle-wrapper.jar
 *.war
 *.nar
 *.ear
@@ -22,3 +23,41 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+!**/src/main/**/out/
+!**/src/test/**/out/
+.vscode/
+.codex
+codex-cli-start.bat
+
+### Gradle ###
+.gradle/
+**/.gradle/
+
+### Build output ###
+build/
+**/build/
+bin/
+**/bin/
+out/
+**/out/
+!**/src/main/**/build/
+!**/src/test/**/build/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### Local runtime files ###
+/storage/
+/*/storage/
+
+### Environment files ###
+.env
+.env.*
+!.env.example
