@@ -1,6 +1,9 @@
 package com.snails.ecommerce.listing.api;
 
 import com.snails.ecommerce.common.api.ApiResponse;
+import com.snails.ecommerce.competitor.api.CompetitorSnapshotResponse;
+import com.snails.ecommerce.competitor.api.SubmitManualCompetitorsRequest;
+import com.snails.ecommerce.competitor.application.CompetitorSnapshotService;
 import com.snails.ecommerce.listing.application.BriefReviewService;
 import com.snails.ecommerce.listing.application.ListingWorkflowService;
 import jakarta.validation.Valid;
@@ -30,6 +33,9 @@ public class ListingTaskController {
 
     /** Brief 人工审核应用服务。 */
     private final BriefReviewService briefReviewService;
+
+    /** 竞品快照补录与查询应用服务。 */
+    private final CompetitorSnapshotService competitorSnapshotService;
 
     /**
      * 提交 Listing 资产生成任务。
@@ -102,5 +108,35 @@ public class ListingTaskController {
             @PathVariable String briefVersionId,
             @Valid @RequestBody ApproveBriefRequest request) {
         return ApiResponse.ok(briefReviewService.approveBrief(taskId, briefVersionId, request));
+    }
+
+    /**
+     * 批量补录任务的手工竞品快照。
+     *
+     * <p>Controller 只负责请求校验和响应包装，任务状态、ASIN 范围与批量原子性由应用服务保证。</p>
+     */
+    @PostMapping("/{taskId}/competitors/manual")
+    public ApiResponse<List<CompetitorSnapshotResponse>> submitManualCompetitors(
+            @PathVariable String taskId,
+            @Valid @RequestBody SubmitManualCompetitorsRequest request) {
+        return ApiResponse.ok(competitorSnapshotService.submitManualSnapshots(taskId, request));
+    }
+
+    /**
+     * 查询任务的全部竞品快照历史。
+     */
+    @GetMapping("/{taskId}/competitors")
+    public ApiResponse<List<CompetitorSnapshotResponse>> listCompetitors(
+            @PathVariable String taskId) {
+        return ApiResponse.ok(competitorSnapshotService.listSnapshots(taskId));
+    }
+
+    /**
+     * 查询任务中每个 ASIN 的最新竞品快照。
+     */
+    @GetMapping("/{taskId}/competitors/latest")
+    public ApiResponse<List<CompetitorSnapshotResponse>> listLatestCompetitors(
+            @PathVariable String taskId) {
+        return ApiResponse.ok(competitorSnapshotService.listLatestSnapshots(taskId));
     }
 }

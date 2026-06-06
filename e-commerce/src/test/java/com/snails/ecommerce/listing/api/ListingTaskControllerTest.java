@@ -13,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.snails.ecommerce.common.error.BusinessException;
 import com.snails.ecommerce.common.error.ErrorCode;
 import com.snails.ecommerce.common.error.GlobalExceptionHandler;
+import com.snails.ecommerce.competitor.api.CompetitorSnapshotResponse;
+import com.snails.ecommerce.competitor.application.CompetitorSnapshotService;
 import com.snails.ecommerce.listing.application.BriefReviewService;
 import com.snails.ecommerce.listing.domain.BriefStatus;
 import com.snails.ecommerce.listing.domain.GenerationStatus;
@@ -50,6 +52,9 @@ class ListingTaskControllerTest {
     @MockitoBean
     private BriefReviewService briefReviewService;
 
+    @MockitoBean
+    private CompetitorSnapshotService competitorSnapshotService;
+
     @Test
     void submitsListingTask() throws Exception {
         MockMultipartFile documentFile = new MockMultipartFile(
@@ -81,6 +86,118 @@ class ListingTaskControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.code").value("OK"))
                 .andExpect(jsonPath("$.data.taskId").value("task_123"));
+    }
+
+    @Test
+    void submitsManualCompetitorSnapshots() throws Exception {
+        when(competitorSnapshotService.submitManualSnapshots(eq("task_123"), any()))
+                .thenReturn(List.of(competitorResponse()));
+
+        mockMvc.perform(post("/api/v1/listing/task_123/competitors/manual")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "createdBy": "operator@example.com",
+                                  "snapshots": [{
+                                    "asin": "B0FIRST",
+                                    "title": "First Car Stereo",
+                                    "bulletPoints": [],
+                                    "rating": 4.5,
+                                    "reviewCount": 120,
+                                    "reviewPainPoints": [],
+                                    "keywordSignals": [],
+                                    "sourceName": "Manual Entry"
+                                  }]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].asin").value("B0FIRST"))
+                .andExpect(jsonPath("$.data[0].sourceType").value("MANUAL"));
+    }
+
+    @Test
+    void listsCompetitorSnapshotHistory() throws Exception {
+        when(competitorSnapshotService.listSnapshots("task_123"))
+                .thenReturn(List.of(competitorResponse()));
+
+        mockMvc.perform(get("/api/v1/listing/task_123/competitors"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].asin").value("B0FIRST"));
+    }
+
+    @Test
+    void listsLatestCompetitorSnapshots() throws Exception {
+        when(competitorSnapshotService.listLatestSnapshots("task_123"))
+                .thenReturn(List.of(competitorResponse()));
+
+        mockMvc.perform(get("/api/v1/listing/task_123/competitors/latest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].sourceType").value("MANUAL"));
+    }
+
+    @Test
+    void rejectsInvalidManualCompetitorRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/listing/task_123/competitors/manual")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "createdBy": "",
+                                  "snapshots": [{
+                                    "asin": "",
+                                    "title": "Invalid",
+                                    "bulletPoints": [],
+                                    "rating": 5.1,
+                                    "reviewPainPoints": [],
+                                    "keywordSignals": []
+                                  }]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void rejectsEmptyManualCompetitorSnapshots() throws Exception {
+        mockMvc.perform(post("/api/v1/listing/task_123/competitors/manual")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "createdBy": "operator@example.com",
+                                  "snapshots": []
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void preservesCompetitorServiceBusinessError() throws Exception {
+        when(competitorSnapshotService.submitManualSnapshots(eq("task_123"), any()))
+                .thenThrow(new BusinessException(
+                        ErrorCode.TASK_STATUS_INVALID,
+                        "Listing task does not allow competitor input: task_123"));
+
+        mockMvc.perform(post("/api/v1/listing/task_123/competitors/manual")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "createdBy": "operator@example.com",
+                                  "snapshots": [{
+                                    "asin": "B0FIRST",
+                                    "title": "First Car Stereo",
+                                    "bulletPoints": [],
+                                    "reviewPainPoints": [],
+                                    "keywordSignals": []
+                                  }]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("TASK_STATUS_INVALID"));
     }
 
     @Test
@@ -258,5 +375,25 @@ class ListingTaskControllerTest {
                 approved ? "reviewer@example.com" : null,
                 approved ? LocalDateTime.of(2026, 6, 6, 12, 0) : null,
                 LocalDateTime.of(2026, 6, 6, 11, 0));
+    }
+
+    private CompetitorSnapshotResponse competitorResponse() {
+        LocalDateTime now = LocalDateTime.of(2026, 6, 6, 12, 0);
+        return new CompetitorSnapshotResponse(
+                "competitor_123",
+                "task_123",
+                "B0FIRST",
+                "First Car Stereo",
+                List.of(),
+                null,
+                null,
+                List.of(),
+                List.of(),
+                "MANUAL",
+                "Manual Entry",
+                null,
+                now,
+                "operator@example.com",
+                now);
     }
 }
