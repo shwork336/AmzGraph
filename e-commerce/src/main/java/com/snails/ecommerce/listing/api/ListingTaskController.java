@@ -1,7 +1,9 @@
 package com.snails.ecommerce.listing.api;
 
 import com.snails.ecommerce.common.api.ApiResponse;
+import com.snails.ecommerce.listing.application.BriefReviewService;
 import com.snails.ecommerce.listing.application.ListingWorkflowService;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -24,6 +27,9 @@ public class ListingTaskController {
 
     /** Listing 工作流应用服务。 */
     private final ListingWorkflowService workflowService;
+
+    /** Brief 人工审核应用服务。 */
+    private final BriefReviewService briefReviewService;
 
     /**
      * 提交 Listing 资产生成任务。
@@ -57,5 +63,44 @@ public class ListingTaskController {
     @GetMapping("/{taskId}")
     public ApiResponse<ListingTaskDetailResponse> getTaskDetail(@PathVariable String taskId) {
         return ApiResponse.ok(workflowService.getTaskDetail(taskId));
+    }
+
+    /**
+     * 查询任务的全部 Brief 版本。
+     *
+     * <p>结果按创建时间和版本 ID 倒序排列，该查询不触发状态变更。</p>
+     */
+    @GetMapping("/{taskId}/briefs")
+    public ApiResponse<List<BriefVersionResponse>> listBriefVersions(@PathVariable String taskId) {
+        return ApiResponse.ok(briefReviewService.listBriefVersions(taskId));
+    }
+
+    /**
+     * 查询任务当前最新 Brief。
+     */
+    @GetMapping("/{taskId}/briefs/latest")
+    public ApiResponse<BriefVersionResponse> getLatestBrief(@PathVariable String taskId) {
+        return ApiResponse.ok(briefReviewService.getLatestBrief(taskId));
+    }
+
+    /**
+     * 基于当前最新 Brief 创建人工修改版本。
+     */
+    @PostMapping("/{taskId}/briefs")
+    public ApiResponse<BriefVersionResponse> createBriefVersion(
+            @PathVariable String taskId,
+            @Valid @RequestBody CreateBriefVersionRequest request) {
+        return ApiResponse.ok(briefReviewService.createVersion(taskId, request));
+    }
+
+    /**
+     * 批准任务当前最新 Brief，并推进到图文生成阶段。
+     */
+    @PostMapping("/{taskId}/briefs/{briefVersionId}/approve")
+    public ApiResponse<BriefVersionResponse> approveBrief(
+            @PathVariable String taskId,
+            @PathVariable String briefVersionId,
+            @Valid @RequestBody ApproveBriefRequest request) {
+        return ApiResponse.ok(briefReviewService.approveBrief(taskId, briefVersionId, request));
     }
 }
