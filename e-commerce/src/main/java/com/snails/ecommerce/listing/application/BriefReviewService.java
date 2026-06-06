@@ -3,6 +3,7 @@ package com.snails.ecommerce.listing.application;
 import com.snails.ecommerce.common.error.BusinessException;
 import com.snails.ecommerce.common.error.ErrorCode;
 import com.snails.ecommerce.common.id.IdGenerator;
+import com.snails.ecommerce.listing.api.ApproveBriefRequest;
 import com.snails.ecommerce.listing.api.BriefVersionResponse;
 import com.snails.ecommerce.listing.api.CreateBriefVersionRequest;
 import com.snails.ecommerce.listing.domain.BriefStatus;
@@ -11,6 +12,7 @@ import com.snails.ecommerce.listing.domain.ListingTask;
 import com.snails.ecommerce.listing.domain.ListingTaskStatus;
 import com.snails.ecommerce.listing.infrastructure.ListingBriefVersionRepository;
 import com.snails.ecommerce.listing.infrastructure.ListingTaskRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -109,6 +111,56 @@ public class BriefReviewService {
         newBrief.setCreatedBy(request.createdBy().trim());
 
         return toResponse(listingBriefVersionRepository.save(newBrief));
+    }
+
+    /**
+     * 批准任务当前最新 Brief，并把任务推进到图文生成阶段。
+     *
+     * <p>审批只更新 Brief 审计字段和任务状态，不在本阶段调用文案或图片生成服务。</p>
+     *
+     * @param taskId 任务 ID
+     * @param briefVersionId 待批准的 Brief 版本 ID
+     * @param request 审批人信息
+     * @return 批准后的 Brief 版本
+     */
+    @Transactional
+    public BriefVersionResponse approveBrief(
+            String taskId,
+            String briefVersionId,
+            ApproveBriefRequest request) {
+        ListingTask task = requireTask(taskId);
+        requireWaitingForBriefApproval(task);
+
+        ListingBriefVersion brief = listingBriefVersionRepository.findById(briefVersionId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Brief not found: " + briefVersionId));
+        if (!taskId.equals(brief.getTaskId())) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "Brief does not belong to task: " + briefVersionId);
+        }
+
+        ListingBriefVersion latestBrief = requireLatestBrief(taskId);
+        if (!latestBrief.getBriefVersionId().equals(briefVersionId)) {
+            throw new BusinessException(
+                    ErrorCode.TASK_STATUS_INVALID,
+                    "Brief version is not the latest version: " + briefVersionId);
+        }
+        if (brief.isApproved()) {
+            throw new BusinessException(
+                    ErrorCode.TASK_STATUS_INVALID,
+                    "Brief has already been approved: " + briefVersionId);
+        }
+
+        brief.setApproved(true);
+        brief.setApprovedBy(request.approvedBy().trim());
+        brief.setApprovedAt(LocalDateTime.now());
+        task.setBriefStatus(BriefStatus.APPROVED);
+        task.setStatus(ListingTaskStatus.GENERATING);
+
+        listingTaskRepository.save(task);
+        return toResponse(listingBriefVersionRepository.save(brief));
     }
 
     /**

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.snails.ecommerce.common.error.BusinessException;
 import com.snails.ecommerce.common.error.ErrorCode;
 import com.snails.ecommerce.common.id.IdGenerator;
+import com.snails.ecommerce.listing.api.ApproveBriefRequest;
 import com.snails.ecommerce.listing.api.BriefVersionResponse;
 import com.snails.ecommerce.listing.api.CreateBriefVersionRequest;
 import com.snails.ecommerce.listing.domain.BriefStatus;
@@ -123,6 +124,79 @@ class BriefReviewServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TASK_STATUS_INVALID);
+    }
+
+    @Test
+    void approvesLatestBriefAndMovesTaskToGenerating() {
+        ListingTask task = saveWaitingTask("task_approve");
+        ListingBriefVersion brief = saveBrief("brief_approve", task.getTaskId(), null, "operator@example.com");
+
+        BriefVersionResponse approved = service.approveBrief(
+                task.getTaskId(),
+                brief.getBriefVersionId(),
+                new ApproveBriefRequest("reviewer@example.com"));
+
+        assertThat(approved.approved()).isTrue();
+        assertThat(approved.approvedBy()).isEqualTo("reviewer@example.com");
+        assertThat(approved.approvedAt()).isNotNull();
+
+        ListingTask savedTask = listingTaskRepository.findById(task.getTaskId()).orElseThrow();
+        assertThat(savedTask.getStatus()).isEqualTo(ListingTaskStatus.GENERATING);
+        assertThat(savedTask.getBriefStatus()).isEqualTo(BriefStatus.APPROVED);
+        assertThat(savedTask.getTextStatus()).isEqualTo(GenerationStatus.NOT_STARTED);
+        assertThat(savedTask.getImageStatus()).isEqualTo(GenerationStatus.NOT_STARTED);
+    }
+
+    @Test
+    void rejectsApprovingHistoricalBrief() {
+        ListingTask task = saveWaitingTask("task_approve_historical");
+        ListingBriefVersion first = saveBrief("brief_001", task.getTaskId(), null, "SYSTEM");
+        saveBrief("brief_002", task.getTaskId(), first.getBriefVersionId(), "operator@example.com");
+
+        assertThatThrownBy(() -> service.approveBrief(
+                        task.getTaskId(),
+                        first.getBriefVersionId(),
+                        new ApproveBriefRequest("reviewer@example.com")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TASK_STATUS_INVALID);
+    }
+
+    @Test
+    void rejectsRepeatedApproval() {
+        ListingTask task = saveWaitingTask("task_repeat_approve");
+        ListingBriefVersion brief = saveBrief("brief_repeat", task.getTaskId(), null, "operator@example.com");
+        service.approveBrief(
+                task.getTaskId(),
+                brief.getBriefVersionId(),
+                new ApproveBriefRequest("reviewer@example.com"));
+
+        assertThatThrownBy(() -> service.approveBrief(
+                        task.getTaskId(),
+                        brief.getBriefVersionId(),
+                        new ApproveBriefRequest("reviewer@example.com")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TASK_STATUS_INVALID);
+    }
+
+    @Test
+    void rejectsBriefOwnedByAnotherTask() {
+        ListingTask targetTask = saveWaitingTask("task_target");
+        ListingTask otherTask = saveWaitingTask("task_other");
+        ListingBriefVersion otherBrief = saveBrief(
+                "brief_other",
+                otherTask.getTaskId(),
+                null,
+                "operator@example.com");
+
+        assertThatThrownBy(() -> service.approveBrief(
+                        targetTask.getTaskId(),
+                        otherBrief.getBriefVersionId(),
+                        new ApproveBriefRequest("reviewer@example.com")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 
     private ListingTask saveWaitingTask(String taskId) {
