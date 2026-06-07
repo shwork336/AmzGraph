@@ -6,6 +6,7 @@ import com.snails.ecommerce.competitor.api.SubmitManualCompetitorsRequest;
 import com.snails.ecommerce.competitor.application.CompetitorSnapshotService;
 import com.snails.ecommerce.listing.application.BriefReviewService;
 import com.snails.ecommerce.listing.application.ListingWorkflowService;
+import com.snails.ecommerce.listing.application.TextGenerationService;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,9 @@ public class ListingTaskController {
 
     /** 竞品快照补录与查询应用服务。 */
     private final CompetitorSnapshotService competitorSnapshotService;
+
+    /** 文案生成应用服务。 */
+    private final TextGenerationService textGenerationService;
 
     /**
      * 提交 Listing 资产生成任务。
@@ -138,5 +142,25 @@ public class ListingTaskController {
     public ApiResponse<List<CompetitorSnapshotResponse>> listLatestCompetitors(
             @PathVariable String taskId) {
         return ApiResponse.ok(competitorSnapshotService.listLatestSnapshots(taskId));
+    }
+
+    /**
+     * 基于任务当前已批准 Brief 生成首版文案。
+     *
+     * <p>该接口只触发文案生成流，不触发图片生成、终审或导出。</p>
+     */
+    @PostMapping("/{taskId}/versions/text/generate")
+    public ApiResponse<TextVersionResponse> generateInitialTextVersion(@PathVariable String taskId) {
+        return ApiResponse.ok(textGenerationService.generateInitialTextVersion(taskId));
+    }
+
+    /**
+     * 查询任务的全部文案版本。
+     *
+     * <p>查询结果按创建时间和版本 ID 倒序排列，不触发生成或状态变更。</p>
+     */
+    @GetMapping("/{taskId}/versions/text")
+    public ApiResponse<List<TextVersionResponse>> listTextVersions(@PathVariable String taskId) {
+        return ApiResponse.ok(textGenerationService.listTextVersions(taskId));
     }
 }

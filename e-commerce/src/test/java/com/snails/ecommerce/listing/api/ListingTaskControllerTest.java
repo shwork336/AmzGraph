@@ -16,6 +16,7 @@ import com.snails.ecommerce.common.error.GlobalExceptionHandler;
 import com.snails.ecommerce.competitor.api.CompetitorSnapshotResponse;
 import com.snails.ecommerce.competitor.application.CompetitorSnapshotService;
 import com.snails.ecommerce.listing.application.BriefReviewService;
+import com.snails.ecommerce.listing.application.TextGenerationService;
 import com.snails.ecommerce.listing.domain.BriefStatus;
 import com.snails.ecommerce.listing.domain.GenerationStatus;
 import com.snails.ecommerce.listing.domain.ListingTaskStatus;
@@ -54,6 +55,9 @@ class ListingTaskControllerTest {
 
     @MockitoBean
     private CompetitorSnapshotService competitorSnapshotService;
+
+    @MockitoBean
+    private TextGenerationService textGenerationService;
 
     @Test
     void submitsListingTask() throws Exception {
@@ -355,6 +359,46 @@ class ListingTaskControllerTest {
                 .andExpect(jsonPath("$.code").value("TASK_STATUS_INVALID"));
     }
 
+    @Test
+    void generatesInitialTextVersion() throws Exception {
+        when(textGenerationService.generateInitialTextVersion("task_123"))
+                .thenReturn(textResponse("text_001", null));
+
+        mockMvc.perform(post("/api/v1/listing/task_123/versions/text/generate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.versionId").value("text_001"))
+                .andExpect(jsonPath("$.data.briefVersionId").value("brief_123"))
+                .andExpect(jsonPath("$.data.title").value("Wireless CarPlay Stereo for Amazon US"))
+                .andExpect(jsonPath("$.data.bulletPoints[0]").value("Wireless CarPlay"));
+    }
+
+    @Test
+    void listsTextVersions() throws Exception {
+        when(textGenerationService.listTextVersions("task_123"))
+                .thenReturn(List.of(textResponse("text_002", "text_001")));
+
+        mockMvc.perform(get("/api/v1/listing/task_123/versions/text"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].versionId").value("text_002"))
+                .andExpect(jsonPath("$.data[0].parentVersionId").value("text_001"))
+                .andExpect(jsonPath("$.data[0].targetKeywords[0]").value("car stereo"));
+    }
+
+    @Test
+    void returnsTaskStatusInvalidFromTextGenerationService() throws Exception {
+        when(textGenerationService.generateInitialTextVersion("task_123"))
+                .thenThrow(new BusinessException(
+                        ErrorCode.TASK_STATUS_INVALID,
+                        "Listing task is not ready for text generation: task_123"));
+
+        mockMvc.perform(post("/api/v1/listing/task_123/versions/text/generate"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("TASK_STATUS_INVALID"));
+    }
+
     private BriefVersionResponse briefResponse(
             String briefVersionId,
             String parentBriefVersionId,
@@ -375,6 +419,24 @@ class ListingTaskControllerTest {
                 approved ? "reviewer@example.com" : null,
                 approved ? LocalDateTime.of(2026, 6, 6, 12, 0) : null,
                 LocalDateTime.of(2026, 6, 6, 11, 0));
+    }
+
+    private TextVersionResponse textResponse(String versionId, String parentVersionId) {
+        return new TextVersionResponse(
+                versionId,
+                "task_123",
+                parentVersionId,
+                "brief_123",
+                null,
+                "Wireless CarPlay Stereo for Amazon US",
+                List.of("Wireless CarPlay", "Android Auto"),
+                "A review-ready car stereo listing.",
+                "wireless carplay stereo",
+                List.of("car stereo"),
+                List.of(),
+                88,
+                false,
+                LocalDateTime.of(2026, 6, 6, 12, 0));
     }
 
     private CompetitorSnapshotResponse competitorResponse() {
