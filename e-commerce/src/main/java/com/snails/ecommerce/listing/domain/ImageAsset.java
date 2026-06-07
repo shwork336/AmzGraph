@@ -81,6 +81,10 @@ public class ImageAsset {
     @Column(length = 128)
     private String complianceReviewedBy;
 
+    /** 人工确认或管理员豁免原因。 */
+    @Column(columnDefinition = "text")
+    private String complianceReviewReason;
+
     /** 人工确认时间。 */
     private LocalDateTime complianceReviewedAt;
 

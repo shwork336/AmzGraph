@@ -36,6 +36,7 @@ class ImageAssetRepositoryTest {
         asset.setComplianceStatus("PASS");
         asset.setComplianceMethodsJson("[\"PLACEHOLDER_RULE_CHECK\"]");
         asset.setComplianceIssuesJson("[]");
+        asset.setComplianceReviewReason("Admin accepted this generated image for phase 1 export.");
 
         repository.save(asset);
 
@@ -43,6 +44,8 @@ class ImageAssetRepositoryTest {
         assertThat(saved.getImageVersionId()).isEqualTo("image_001");
         assertThat(saved.getType()).isEqualTo(ImageAssetType.MAIN_IMAGE);
         assertThat(saved.getPrompt()).contains("MAIN_IMAGE");
+        assertThat(saved.getComplianceReviewReason())
+                .isEqualTo("Admin accepted this generated image for phase 1 export.");
         assertThat(saved.getCreatedAt()).isNotNull();
     }
 

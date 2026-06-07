@@ -8,6 +8,7 @@ import com.snails.ecommerce.listing.domain.ListingBriefVersion;
 import com.snails.ecommerce.listing.domain.ImageAsset;
 import com.snails.ecommerce.listing.domain.ListingTask;
 import com.snails.ecommerce.listing.domain.ListingTaskStatus;
+import com.snails.ecommerce.listing.domain.OperationAuditLog;
 import com.snails.ecommerce.listing.domain.ProductRawData;
 import com.snails.ecommerce.template.domain.ImageAssetType;
 import java.time.LocalDateTime;
@@ -29,6 +30,9 @@ class ListingEntityMappingTest {
 
     @Autowired
     private ImageAssetRepository imageAssetRepository;
+
+    @Autowired
+    private OperationAuditLogRepository operationAuditLogRepository;
 
     @Test
     void savesTaskRawDataAndBriefVersion() {
@@ -97,5 +101,25 @@ class ListingEntityMappingTest {
 
         assertThat(savedAsset.getPrompt()).contains("White background");
         assertThat(savedAsset.getRewrittenPrompt()).contains("Amazon-style");
+    }
+
+    @Test
+    void savesOperationAuditLog() {
+        OperationAuditLog auditLog = new OperationAuditLog();
+        auditLog.setAuditLogId("audit_mapping");
+        auditLog.setAction("EXPORT_PACKAGE_CANCELED");
+        auditLog.setOperatorId("operator@example.com");
+        auditLog.setTargetType("EXPORT_PACKAGE");
+        auditLog.setTargetId("export_mapping");
+        auditLog.setTaskId("task_mapping");
+        auditLog.setReason("Duplicate export request");
+        auditLog.setDetailJson("{\"format\":\"ZIP\"}");
+        operationAuditLogRepository.save(auditLog);
+
+        OperationAuditLog saved = operationAuditLogRepository.findById("audit_mapping").orElseThrow();
+
+        assertThat(saved.getAction()).isEqualTo("EXPORT_PACKAGE_CANCELED");
+        assertThat(saved.getOperatorId()).isEqualTo("operator@example.com");
+        assertThat(saved.getCreatedAt()).isNotNull();
     }
 }

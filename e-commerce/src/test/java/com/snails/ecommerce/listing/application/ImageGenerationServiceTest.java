@@ -115,8 +115,36 @@ class ImageGenerationServiceTest {
         assertThat(assets.get(7).getTargetHeight()).isEqualTo(600);
 
         ListingTask savedTask = listingTaskRepository.findById(task.getTaskId()).orElseThrow();
-        assertThat(savedTask.getStatus()).isEqualTo(ListingTaskStatus.GENERATING);
+        assertThat(savedTask.getStatus()).isEqualTo(ListingTaskStatus.WAIT_FINAL_APPROVE);
         assertThat(savedTask.getTextStatus()).isEqualTo(GenerationStatus.SUCCEEDED);
+        assertThat(savedTask.getImageStatus()).isEqualTo(GenerationStatus.SUCCEEDED);
+    }
+
+    @Test
+    void movesTaskToFinalReviewWhenTextAlreadySucceeded() {
+        ListingTask task = saveGeneratingTask("task_image_final_ready");
+        saveApprovedBrief("brief_image_final_ready", task.getTaskId());
+
+        service.generateInitialImageVersion(task.getTaskId());
+
+        ListingTask savedTask = listingTaskRepository.findById(task.getTaskId()).orElseThrow();
+        assertThat(savedTask.getStatus()).isEqualTo(ListingTaskStatus.WAIT_FINAL_APPROVE);
+        assertThat(savedTask.getTextStatus()).isEqualTo(GenerationStatus.SUCCEEDED);
+        assertThat(savedTask.getImageStatus()).isEqualTo(GenerationStatus.SUCCEEDED);
+    }
+
+    @Test
+    void keepsTaskGeneratingWhenTextHasNotSucceeded() {
+        ListingTask task = saveGeneratingTask("task_image_not_final_ready");
+        task.setTextStatus(GenerationStatus.RUNNING);
+        listingTaskRepository.save(task);
+        saveApprovedBrief("brief_image_not_final_ready", task.getTaskId());
+
+        service.generateInitialImageVersion(task.getTaskId());
+
+        ListingTask savedTask = listingTaskRepository.findById(task.getTaskId()).orElseThrow();
+        assertThat(savedTask.getStatus()).isEqualTo(ListingTaskStatus.GENERATING);
+        assertThat(savedTask.getTextStatus()).isEqualTo(GenerationStatus.RUNNING);
         assertThat(savedTask.getImageStatus()).isEqualTo(GenerationStatus.SUCCEEDED);
     }
 
@@ -165,6 +193,7 @@ class ImageGenerationServiceTest {
                 .containsExactly("asset_001", "asset_002");
         assertThat(assets.get(0).type()).isEqualTo("MAIN_IMAGE");
         assertThat(assets.get(0).complianceMethods()).containsExactly("PLACEHOLDER_RULE_CHECK");
+        assertThat(assets.get(0).complianceReviewReason()).isNull();
     }
 
     @Test

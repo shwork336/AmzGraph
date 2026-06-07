@@ -1,0 +1,76 @@
+import { createApp } from 'vue';
+import {
+  create,
+  NAlert,
+  NButton,
+  NCard,
+  NConfigProvider,
+  NDataTable,
+  NDescriptions,
+  NDescriptionsItem,
+  NDivider,
+  NEmpty,
+  NForm,
+  NFormItem,
+  NGi,
+  NGrid,
+  NIcon,
+  NInput,
+  NInputGroup,
+  NInputGroupLabel,
+  NLayout,
+  NLayoutContent,
+  NLayoutHeader,
+  NModal,
+  NPagination,
+  NPopconfirm,
+  NSelect,
+  NSpace,
+  NSpin,
+  NStatistic,
+  NTag,
+  NText,
+  NThing,
+  NUpload
+} from 'naive-ui';
+import App from './App.vue';
+import { router } from './router';
+import './styles.css';
+
+const naive = create({
+  components: [
+    NAlert,
+    NButton,
+    NCard,
+    NConfigProvider,
+    NDataTable,
+    NDescriptions,
+    NDescriptionsItem,
+    NDivider,
+    NEmpty,
+    NForm,
+    NFormItem,
+    NGi,
+    NGrid,
+    NIcon,
+    NInput,
+    NInputGroup,
+    NInputGroupLabel,
+    NLayout,
+    NLayoutContent,
+    NLayoutHeader,
+    NModal,
+    NPagination,
+    NPopconfirm,
+    NSelect,
+    NSpace,
+    NSpin,
+    NStatistic,
+    NTag,
+    NText,
+    NThing,
+    NUpload
+  ]
+});
+
+createApp(App).use(router).use(naive).mount('#app');

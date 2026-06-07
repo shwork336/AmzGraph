@@ -48,6 +48,8 @@ bin/
 **/bin/
 out/
 **/out/
+dist/
+**/dist/
 !**/src/main/**/build/
 !**/src/test/**/build/
 !**/src/main/**/bin/
@@ -58,6 +60,10 @@ out/
 ### Local runtime files ###
 /storage/
 /*/storage/
+node_modules/
+**/node_modules/
+.npm-cache/
+**/.npm-cache/
 
 ### Environment files ###
 .env

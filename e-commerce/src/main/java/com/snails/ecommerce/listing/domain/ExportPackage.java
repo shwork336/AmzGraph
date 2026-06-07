@@ -58,6 +58,21 @@ public class ExportPackage {
     @Column(length = 40)
     private String status;
 
+    /** 失败原因。 */
+    @Column(columnDefinition = "text")
+    private String failureReason;
+
+    /** 取消导出记录的操作人。 */
+    @Column(length = 128)
+    private String canceledBy;
+
+    /** 取消导出记录的业务原因。 */
+    @Column(columnDefinition = "text")
+    private String cancelReason;
+
+    /** 取消发生时间。 */
+    private LocalDateTime canceledAt;
+
     /** 包含的图片资产 ID 列表 JSON。 */
     @Column(columnDefinition = "text")
     private String includedAssetIdsJson;
@@ -66,9 +81,18 @@ public class ExportPackage {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
+    /** 导出开始执行时间。 */
+    private LocalDateTime startedAt;
+
+    /** 导出记录最后更新时间。 */
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
     /** 新建导出包时自动填充创建时间。 */
     @PrePersist
     void prePersist() {
-        createdAt = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
+        createdAt = now;
+        updatedAt = now;
     }
 }

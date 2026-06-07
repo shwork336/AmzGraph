@@ -93,6 +93,7 @@ public class TextGenerationService {
 
             TextVersion saved = textVersionRepository.save(generated);
             task.setTextStatus(GenerationStatus.SUCCEEDED);
+            moveToFinalReviewIfReady(task);
             listingTaskRepository.save(task);
             return toResponse(saved);
         } catch (BusinessException exception) {
@@ -167,6 +168,16 @@ public class TextGenerationService {
     private void markTextGenerationFailed(ListingTask task) {
         task.setTextStatus(GenerationStatus.FAILED);
         listingTaskRepository.save(task);
+    }
+
+    /**
+     * 文案和图片均生成成功时推进到终审阶段。
+     */
+    private void moveToFinalReviewIfReady(ListingTask task) {
+        if (task.getTextStatus() == GenerationStatus.SUCCEEDED
+                && task.getImageStatus() == GenerationStatus.SUCCEEDED) {
+            task.setStatus(ListingTaskStatus.WAIT_FINAL_APPROVE);
+        }
     }
 
     /**

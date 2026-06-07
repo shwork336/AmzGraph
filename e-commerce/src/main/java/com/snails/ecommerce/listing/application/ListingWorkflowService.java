@@ -1,11 +1,13 @@
 package com.snails.ecommerce.listing.application;
 
+import com.snails.ecommerce.common.api.PagedResponse;
 import com.snails.ecommerce.common.error.BusinessException;
 import com.snails.ecommerce.common.error.ErrorCode;
 import com.snails.ecommerce.common.id.IdGenerator;
 import com.snails.ecommerce.common.storage.FileStoragePort;
 import com.snails.ecommerce.common.storage.StoredFile;
 import com.snails.ecommerce.listing.api.ListingTaskDetailResponse;
+import com.snails.ecommerce.listing.api.ListingTaskSummaryResponse;
 import com.snails.ecommerce.listing.domain.BriefStatus;
 import com.snails.ecommerce.listing.domain.GenerationStatus;
 import com.snails.ecommerce.listing.domain.ListingBriefVersion;
@@ -19,6 +21,7 @@ import com.snails.ecommerce.template.application.CategoryTemplateService;
 import com.snails.ecommerce.template.domain.CategoryTemplate;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -160,6 +163,59 @@ public class ListingWorkflowService {
                 latestBrief,
                 parseJsonStringArray(task.getOriginalProductUrlsJson()),
                 parseJsonStringArray(task.getCompetitorAsinsJson()));
+    }
+
+    /**
+     * 分页查询 Listing 任务列表。
+     *
+     * <p>该查询用于运营工作台任务列表，只读取任务主记录，不触发生成、审批或导出副作用。</p>
+     */
+    @Transactional(readOnly = true)
+    public PagedResponse<ListingTaskSummaryResponse> listTasksPage(
+            String status,
+            String marketplace,
+            String categoryCode,
+            int page,
+            int size) {
+        requireValidPageRequest(page, size);
+        List<ListingTask> filteredTasks = listingTaskRepository.findAll()
+                .stream()
+                .filter(task -> !StringUtils.hasText(status) || status.equals(task.getStatus().name()))
+                .filter(task -> !StringUtils.hasText(marketplace) || marketplace.equals(task.getMarketplace()))
+                .filter(task -> !StringUtils.hasText(categoryCode) || categoryCode.equals(task.getCategoryCode()))
+                .sorted(Comparator
+                        .comparing(ListingTask::getUpdatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(ListingTask::getTaskId)
+                        .reversed())
+                .toList();
+        int totalItems = filteredTasks.size();
+        int totalPages = totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / size);
+        int fromIndex = Math.min(page * size, totalItems);
+        int toIndex = Math.min(fromIndex + size, totalItems);
+        List<ListingTaskSummaryResponse> items = filteredTasks.subList(fromIndex, toIndex)
+                .stream()
+                .map(ListingTaskSummaryResponse::from)
+                .toList();
+        return new PagedResponse<>(
+                items,
+                page,
+                size,
+                totalItems,
+                totalPages,
+                page + 1 < totalPages,
+                page > 0);
+    }
+
+    /**
+     * 校验分页参数。
+     */
+    private void requireValidPageRequest(int page, int size) {
+        if (page < 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Page must be greater than or equal to 0");
+        }
+        if (size <= 0 || size > 100) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Page size must be between 1 and 100");
+        }
     }
 
     /**

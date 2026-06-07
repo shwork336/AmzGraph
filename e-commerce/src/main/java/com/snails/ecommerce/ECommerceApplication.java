@@ -2,8 +2,10 @@ package com.snails.ecommerce;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
+@EnableScheduling
 /**
  * 电商 AI 图文资产流水线后端应用入口。
  *

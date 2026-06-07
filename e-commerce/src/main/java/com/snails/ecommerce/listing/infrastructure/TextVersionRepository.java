@@ -21,4 +21,9 @@ public interface TextVersionRepository extends JpaRepository<TextVersion, String
      * 按创建时间和版本 ID 倒序查询指定任务的文案版本历史。
      */
     List<TextVersion> findByTaskIdOrderByCreatedAtDescVersionIdDesc(String taskId);
+
+    /**
+     * 查询指定任务的全部文案版本。
+     */
+    List<TextVersion> findByTaskId(String taskId);
 }

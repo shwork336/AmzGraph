@@ -21,4 +21,9 @@ public interface ImageVersionRepository extends JpaRepository<ImageVersion, Stri
      * 按创建时间和版本 ID 倒序查询指定任务的图片版本历史。
      */
     List<ImageVersion> findByTaskIdOrderByCreatedAtDescVersionIdDesc(String taskId);
+
+    /**
+     * 查询指定任务的全部图片版本。
+     */
+    List<ImageVersion> findByTaskId(String taskId);
 }

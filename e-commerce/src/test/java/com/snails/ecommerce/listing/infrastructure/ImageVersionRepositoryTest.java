@@ -87,6 +87,19 @@ class ImageVersionRepositoryTest {
         assertThat(found.getVersionId()).isEqualTo("image_002");
     }
 
+    @Test
+    void findsVersionsByTaskId() {
+        repository.save(baseVersion("image_001", "task_image"));
+        repository.save(baseVersion("image_002", "task_image"));
+        repository.save(baseVersion("image_other", "task_other"));
+
+        List<ImageVersion> versions = repository.findByTaskId("task_image");
+
+        assertThat(versions)
+                .extracting(ImageVersion::getVersionId)
+                .containsExactlyInAnyOrder("image_001", "image_002");
+    }
+
     private ImageVersion baseVersion(String versionId, String taskId) {
         ImageVersion version = new ImageVersion();
         version.setVersionId(versionId);

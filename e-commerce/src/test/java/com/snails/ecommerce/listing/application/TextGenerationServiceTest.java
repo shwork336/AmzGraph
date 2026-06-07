@@ -90,6 +90,36 @@ class TextGenerationServiceTest {
     }
 
     @Test
+    void movesTaskToFinalReviewWhenImageAlreadySucceeded() {
+        ListingTask task = saveGeneratingTask("task_text_final_ready");
+        task.setImageStatus(GenerationStatus.SUCCEEDED);
+        listingTaskRepository.save(task);
+        saveApprovedBrief("brief_text_final_ready", task.getTaskId());
+
+        service.generateInitialTextVersion(task.getTaskId());
+
+        ListingTask savedTask = listingTaskRepository.findById(task.getTaskId()).orElseThrow();
+        assertThat(savedTask.getStatus()).isEqualTo(ListingTaskStatus.WAIT_FINAL_APPROVE);
+        assertThat(savedTask.getTextStatus()).isEqualTo(GenerationStatus.SUCCEEDED);
+        assertThat(savedTask.getImageStatus()).isEqualTo(GenerationStatus.SUCCEEDED);
+    }
+
+    @Test
+    void keepsTaskGeneratingWhenImageHasNotSucceeded() {
+        ListingTask task = saveGeneratingTask("task_text_not_final_ready");
+        task.setImageStatus(GenerationStatus.RUNNING);
+        listingTaskRepository.save(task);
+        saveApprovedBrief("brief_text_not_final_ready", task.getTaskId());
+
+        service.generateInitialTextVersion(task.getTaskId());
+
+        ListingTask savedTask = listingTaskRepository.findById(task.getTaskId()).orElseThrow();
+        assertThat(savedTask.getStatus()).isEqualTo(ListingTaskStatus.GENERATING);
+        assertThat(savedTask.getTextStatus()).isEqualTo(GenerationStatus.SUCCEEDED);
+        assertThat(savedTask.getImageStatus()).isEqualTo(GenerationStatus.RUNNING);
+    }
+
+    @Test
     void createsNewVersionWithParentWhenTextAlreadyExists() {
         ListingTask task = saveGeneratingTask("task_parent");
         saveApprovedBrief("brief_parent", task.getTaskId());

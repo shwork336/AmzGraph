@@ -84,6 +84,19 @@ class TextVersionRepositoryTest {
         assertThat(found.getVersionId()).isEqualTo("text_002");
     }
 
+    @Test
+    void findsVersionsByTaskId() {
+        repository.save(baseVersion("text_001", "task_text"));
+        repository.save(baseVersion("text_002", "task_text"));
+        repository.save(baseVersion("text_other", "task_other"));
+
+        List<TextVersion> versions = repository.findByTaskId("task_text");
+
+        assertThat(versions)
+                .extracting(TextVersion::getVersionId)
+                .containsExactlyInAnyOrder("text_001", "text_002");
+    }
+
     private TextVersion baseVersion(String versionId, String taskId) {
         TextVersion version = new TextVersion();
         version.setVersionId(versionId);

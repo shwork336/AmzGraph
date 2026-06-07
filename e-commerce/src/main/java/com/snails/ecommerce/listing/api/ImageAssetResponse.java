@@ -22,6 +22,7 @@ import java.util.List;
  * @param complianceMethods 合规检测方法
  * @param complianceIssues 合规问题
  * @param complianceReviewedBy 人工确认人
+ * @param complianceReviewReason 人工确认或管理员豁免原因
  * @param complianceReviewedAt 人工确认时间
  * @param sortOrder 图片组内排序
  * @param createdAt 创建时间
@@ -41,6 +42,7 @@ public record ImageAssetResponse(
         List<String> complianceMethods,
         List<String> complianceIssues,
         String complianceReviewedBy,
+        String complianceReviewReason,
         LocalDateTime complianceReviewedAt,
         Integer sortOrder,
         LocalDateTime createdAt

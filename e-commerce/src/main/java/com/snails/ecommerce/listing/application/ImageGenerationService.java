@@ -108,6 +108,7 @@ public class ImageGenerationService {
             savedVersion.setQualityScore(80);
             ImageVersion completedVersion = imageVersionRepository.save(savedVersion);
             task.setImageStatus(GenerationStatus.SUCCEEDED);
+            moveToFinalReviewIfReady(task);
             listingTaskRepository.save(task);
             return toVersionResponse(completedVersion);
         } catch (BusinessException exception) {
@@ -236,6 +237,16 @@ public class ImageGenerationService {
     }
 
     /**
+     * 文案和图片均生成成功时推进到终审阶段。
+     */
+    private void moveToFinalReviewIfReady(ListingTask task) {
+        if (task.getTextStatus() == GenerationStatus.SUCCEEDED
+                && task.getImageStatus() == GenerationStatus.SUCCEEDED) {
+            task.setStatus(ListingTaskStatus.WAIT_FINAL_APPROVE);
+        }
+    }
+
+    /**
      * 将图片版本实体转换为稳定 API 响应。
      */
     private ImageVersionResponse toVersionResponse(ImageVersion version) {
@@ -275,6 +286,7 @@ public class ImageGenerationService {
                 readStringList(asset.getComplianceMethodsJson()),
                 readStringList(asset.getComplianceIssuesJson()),
                 asset.getComplianceReviewedBy(),
+                asset.getComplianceReviewReason(),
                 asset.getComplianceReviewedAt(),
                 asset.getSortOrder(),
                 asset.getCreatedAt());
