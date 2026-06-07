@@ -5,6 +5,7 @@ import com.snails.ecommerce.competitor.api.CompetitorSnapshotResponse;
 import com.snails.ecommerce.competitor.api.SubmitManualCompetitorsRequest;
 import com.snails.ecommerce.competitor.application.CompetitorSnapshotService;
 import com.snails.ecommerce.listing.application.BriefReviewService;
+import com.snails.ecommerce.listing.application.ImageGenerationService;
 import com.snails.ecommerce.listing.application.ListingWorkflowService;
 import com.snails.ecommerce.listing.application.TextGenerationService;
 import jakarta.validation.Valid;
@@ -40,6 +41,9 @@ public class ListingTaskController {
 
     /** 文案生成应用服务。 */
     private final TextGenerationService textGenerationService;
+
+    /** 图片生成应用服务。 */
+    private final ImageGenerationService imageGenerationService;
 
     /**
      * 提交 Listing 资产生成任务。
@@ -162,5 +166,37 @@ public class ListingTaskController {
     @GetMapping("/{taskId}/versions/text")
     public ApiResponse<List<TextVersionResponse>> listTextVersions(@PathVariable String taskId) {
         return ApiResponse.ok(textGenerationService.listTextVersions(taskId));
+    }
+
+    /**
+     * 基于任务当前已批准 Brief 生成首版图片组。
+     *
+     * <p>该接口只触发图片生成流，不触发终审或导出。</p>
+     */
+    @PostMapping("/{taskId}/versions/image/generate")
+    public ApiResponse<ImageVersionResponse> generateInitialImageVersion(@PathVariable String taskId) {
+        return ApiResponse.ok(imageGenerationService.generateInitialImageVersion(taskId));
+    }
+
+    /**
+     * 查询任务的全部图片版本。
+     *
+     * <p>查询结果按创建时间和版本 ID 倒序排列，不触发生成或状态变更。</p>
+     */
+    @GetMapping("/{taskId}/versions/image")
+    public ApiResponse<List<ImageVersionResponse>> listImageVersions(@PathVariable String taskId) {
+        return ApiResponse.ok(imageGenerationService.listImageVersions(taskId));
+    }
+
+    /**
+     * 查询指定图片版本下的全部图片资产。
+     *
+     * <p>图片版本必须属于指定任务，归属校验由应用服务保证。</p>
+     */
+    @GetMapping("/{taskId}/versions/image/{imageVersionId}/assets")
+    public ApiResponse<List<ImageAssetResponse>> listImageAssets(
+            @PathVariable String taskId,
+            @PathVariable String imageVersionId) {
+        return ApiResponse.ok(imageGenerationService.listImageAssets(taskId, imageVersionId));
     }
 }

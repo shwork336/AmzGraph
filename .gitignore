@@ -35,6 +35,7 @@ replay_pid*
 .codex
 codex-cli-start.bat
 .codegraph/
+.cursor/
 
 ### Gradle ###
 .gradle/

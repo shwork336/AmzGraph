@@ -16,6 +16,7 @@ import com.snails.ecommerce.common.error.GlobalExceptionHandler;
 import com.snails.ecommerce.competitor.api.CompetitorSnapshotResponse;
 import com.snails.ecommerce.competitor.application.CompetitorSnapshotService;
 import com.snails.ecommerce.listing.application.BriefReviewService;
+import com.snails.ecommerce.listing.application.ImageGenerationService;
 import com.snails.ecommerce.listing.application.TextGenerationService;
 import com.snails.ecommerce.listing.domain.BriefStatus;
 import com.snails.ecommerce.listing.domain.GenerationStatus;
@@ -58,6 +59,9 @@ class ListingTaskControllerTest {
 
     @MockitoBean
     private TextGenerationService textGenerationService;
+
+    @MockitoBean
+    private ImageGenerationService imageGenerationService;
 
     @Test
     void submitsListingTask() throws Exception {
@@ -399,6 +403,59 @@ class ListingTaskControllerTest {
                 .andExpect(jsonPath("$.code").value("TASK_STATUS_INVALID"));
     }
 
+    @Test
+    void generatesInitialImageVersion() throws Exception {
+        when(imageGenerationService.generateInitialImageVersion("task_123"))
+                .thenReturn(imageVersionResponse("image_001", null));
+
+        mockMvc.perform(post("/api/v1/listing/task_123/versions/image/generate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.versionId").value("image_001"))
+                .andExpect(jsonPath("$.data.briefVersionId").value("brief_123"))
+                .andExpect(jsonPath("$.data.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.data.inputProductUrls[0]").value("uploads/product-images/product.png"));
+    }
+
+    @Test
+    void listsImageVersions() throws Exception {
+        when(imageGenerationService.listImageVersions("task_123"))
+                .thenReturn(List.of(imageVersionResponse("image_002", "image_001")));
+
+        mockMvc.perform(get("/api/v1/listing/task_123/versions/image"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].versionId").value("image_002"))
+                .andExpect(jsonPath("$.data[0].parentVersionId").value("image_001"))
+                .andExpect(jsonPath("$.data[0].imageProvider").value("PLACEHOLDER"));
+    }
+
+    @Test
+    void listsImageAssets() throws Exception {
+        when(imageGenerationService.listImageAssets("task_123", "image_001"))
+                .thenReturn(List.of(imageAssetResponse("asset_001", "image_001")));
+
+        mockMvc.perform(get("/api/v1/listing/task_123/versions/image/image_001/assets"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].assetId").value("asset_001"))
+                .andExpect(jsonPath("$.data[0].type").value("MAIN_IMAGE"))
+                .andExpect(jsonPath("$.data[0].complianceMethods[0]").value("PLACEHOLDER_RULE_CHECK"));
+    }
+
+    @Test
+    void returnsTaskStatusInvalidFromImageGenerationService() throws Exception {
+        when(imageGenerationService.generateInitialImageVersion("task_123"))
+                .thenThrow(new BusinessException(
+                        ErrorCode.TASK_STATUS_INVALID,
+                        "Listing task is not ready for image generation: task_123"));
+
+        mockMvc.perform(post("/api/v1/listing/task_123/versions/image/generate"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("TASK_STATUS_INVALID"));
+    }
+
     private BriefVersionResponse briefResponse(
             String briefVersionId,
             String parentBriefVersionId,
@@ -436,6 +493,45 @@ class ListingTaskControllerTest {
                 List.of(),
                 88,
                 false,
+                LocalDateTime.of(2026, 6, 6, 12, 0));
+    }
+
+    private ImageVersionResponse imageVersionResponse(String versionId, String parentVersionId) {
+        return new ImageVersionResponse(
+                versionId,
+                "task_123",
+                parentVersionId,
+                "brief_123",
+                null,
+                null,
+                List.of("uploads/product-images/product.png"),
+                "PLACEHOLDER",
+                "placeholder-image-model",
+                "{}",
+                "SUCCEEDED",
+                80,
+                false,
+                LocalDateTime.of(2026, 6, 6, 12, 0));
+    }
+
+    private ImageAssetResponse imageAssetResponse(String assetId, String imageVersionId) {
+        return new ImageAssetResponse(
+                assetId,
+                imageVersionId,
+                "MAIN_IMAGE",
+                "Generate MAIN_IMAGE image",
+                "Placeholder MAIN_IMAGE image",
+                "generated-images/" + imageVersionId + "/MAIN_IMAGE.png",
+                null,
+                "MAIN_IMAGE",
+                2000,
+                2000,
+                "PASS",
+                List.of("PLACEHOLDER_RULE_CHECK"),
+                List.of(),
+                null,
+                null,
+                1,
                 LocalDateTime.of(2026, 6, 6, 12, 0));
     }
 
