@@ -3,10 +3,13 @@ package com.snails.ecommerce.listing.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.snails.ecommerce.common.api.PagedResponse;
 import com.snails.ecommerce.common.error.BusinessException;
 import com.snails.ecommerce.common.error.ErrorCode;
 import com.snails.ecommerce.common.id.IdGenerator;
 import com.snails.ecommerce.common.storage.LocalFileStorage;
+import com.snails.ecommerce.listing.api.ListingTaskDetailResponse;
+import com.snails.ecommerce.listing.api.ListingTaskSummaryResponse;
 import com.snails.ecommerce.listing.domain.BriefStatus;
 import com.snails.ecommerce.listing.domain.GenerationStatus;
 import com.snails.ecommerce.listing.domain.ListingBriefVersion;
@@ -156,6 +159,108 @@ class ListingWorkflowServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.FILE_INVALID);
+    }
+
+    @Test
+    void getsTaskDetailWithFinalSelectionIds() {
+        ListingTask task = new ListingTask();
+        task.setTaskId("task_detail");
+        task.setStatus(ListingTaskStatus.COMPLETED);
+        task.setTextStatus(GenerationStatus.SUCCEEDED);
+        task.setImageStatus(GenerationStatus.SUCCEEDED);
+        task.setBriefStatus(BriefStatus.APPROVED);
+        task.setCategoryCode("CAR_STEREO");
+        task.setCategoryTemplateId("tpl_car_stereo_us_en");
+        task.setMarketplace("US");
+        task.setLanguage("en-US");
+        task.setOriginalProductUrlsJson("[\"uploads/product-images/product.png\"]");
+        task.setCompetitorAsinsJson("[\"B000TEST\"]");
+        task.setSelectedTextVersionId("text_001");
+        task.setSelectedImageVersionId("image_001");
+        listingTaskRepository.save(task);
+
+        ListingBriefVersion brief = new ListingBriefVersion();
+        brief.setBriefVersionId("brief_detail");
+        brief.setTaskId("task_detail");
+        brief.setTargetAudience("Amazon US car stereo buyers");
+        brief.setCoreSellingPointsJson("[]");
+        brief.setTargetKeywordsJson("[]");
+        brief.setForbiddenClaimsJson("[]");
+        brief.setImageDirectionPromptsJson("[]");
+        brief.setComplianceNotesJson("[]");
+        brief.setApproved(true);
+        brief.setCreatedBy("operator@example.com");
+        brief.setApprovedBy("reviewer@example.com");
+        listingBriefVersionRepository.save(brief);
+
+        ListingTaskDetailResponse response = service.getTaskDetail("task_detail");
+
+        assertThat(response.selectedTextVersionId()).isEqualTo("text_001");
+        assertThat(response.selectedImageVersionId()).isEqualTo("image_001");
+        assertThat(response.latestBrief().briefVersionId()).isEqualTo("brief_detail");
+        assertThat(response.createdAt()).isNotNull();
+        assertThat(response.updatedAt()).isNotNull();
+    }
+
+    @Test
+    void listsTasksWithFiltersAndPagination() {
+        saveTask("task_001", ListingTaskStatus.COMPLETED, "US", "CAR_STEREO");
+        saveTask("task_002", ListingTaskStatus.WAIT_BRIEF_APPROVE, "US", "CAR_STEREO");
+        saveTask("task_003", ListingTaskStatus.COMPLETED, "UK", "CAR_STEREO");
+
+        PagedResponse<ListingTaskSummaryResponse> response = service.listTasksPage(
+                "COMPLETED",
+                "US",
+                "CAR_STEREO",
+                0,
+                10);
+
+        assertThat(response.totalItems()).isEqualTo(1);
+        assertThat(response.items().get(0).taskId()).isEqualTo("task_001");
+        assertThat(response.items().get(0).status()).isEqualTo("COMPLETED");
+        assertThat(response.items().get(0).marketplace()).isEqualTo("US");
+    }
+
+    @Test
+    void rejectsInvalidTaskListPageRequest() {
+        assertThatThrownBy(() -> service.listTasksPage(null, null, null, -1, 20))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+        assertThatThrownBy(() -> service.listTasksPage(null, null, null, 0, 0))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    private ListingTask saveTask(
+            String taskId,
+            ListingTaskStatus status,
+            String marketplace,
+            String categoryCode) {
+        ListingTask task = new ListingTask();
+        task.setTaskId(taskId);
+        task.setStatus(status);
+        task.setTextStatus(status == ListingTaskStatus.COMPLETED
+                ? GenerationStatus.SUCCEEDED
+                : GenerationStatus.NOT_STARTED);
+        task.setImageStatus(status == ListingTaskStatus.COMPLETED
+                ? GenerationStatus.SUCCEEDED
+                : GenerationStatus.NOT_STARTED);
+        task.setBriefStatus(status == ListingTaskStatus.COMPLETED
+                ? BriefStatus.APPROVED
+                : BriefStatus.WAIT_APPROVE);
+        task.setCategoryCode(categoryCode);
+        task.setCategoryTemplateId("tpl_car_stereo_us_en");
+        task.setMarketplace(marketplace);
+        task.setLanguage("en-US");
+        task.setOriginalProductUrlsJson("[]");
+        task.setCompetitorAsinsJson("[]");
+        if (status == ListingTaskStatus.COMPLETED) {
+            task.setSelectedTextVersionId("text_" + taskId);
+            task.setSelectedImageVersionId("image_" + taskId);
+        }
+        return listingTaskRepository.save(task);
     }
 
     /**

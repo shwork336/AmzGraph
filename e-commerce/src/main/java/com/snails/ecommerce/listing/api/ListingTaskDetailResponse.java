@@ -2,6 +2,7 @@ package com.snails.ecommerce.listing.api;
 
 import com.snails.ecommerce.listing.domain.ListingBriefVersion;
 import com.snails.ecommerce.listing.domain.ListingTask;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -20,7 +21,11 @@ import java.util.List;
  * @param language 生成语言
  * @param originalProductUrls 原始产品图文件键列表
  * @param competitorAsins 竞品 ASIN 列表
+ * @param selectedTextVersionId 最终选中的文案版本 ID
+ * @param selectedImageVersionId 最终选中的图片版本 ID
  * @param latestBrief 最新 Brief 摘要
+ * @param createdAt 创建时间
+ * @param updatedAt 更新时间
  */
 public record ListingTaskDetailResponse(
         String taskId,
@@ -34,7 +39,11 @@ public record ListingTaskDetailResponse(
         String language,
         List<String> originalProductUrls,
         List<String> competitorAsins,
-        BriefSummary latestBrief
+        String selectedTextVersionId,
+        String selectedImageVersionId,
+        BriefSummary latestBrief,
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt
 ) {
 
     /**
@@ -59,7 +68,11 @@ public record ListingTaskDetailResponse(
                 task.getLanguage(),
                 originalProductUrls,
                 competitorAsins,
-                BriefSummary.from(latestBrief));
+                task.getSelectedTextVersionId(),
+                task.getSelectedImageVersionId(),
+                BriefSummary.from(latestBrief),
+                task.getCreatedAt(),
+                task.getUpdatedAt());
     }
 
     /**
