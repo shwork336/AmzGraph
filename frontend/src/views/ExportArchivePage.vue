@@ -17,13 +17,19 @@ import type {
   ListingTaskDetailResponse,
   OperationAuditLogResponse
 } from '../api/types';
+import { displayTime, errorMessage } from '../utils/display';
+import { loadOperatorId, saveOperatorId } from '../utils/operator';
+import { exportFormatOptions, exportStatusOptions } from '../utils/options';
+import { createPaginationState, requestPage, resetPaginationPage, syncPagination } from '../utils/pagination';
+import { statusTagType } from '../utils/status';
+import { taskSubPath } from '../utils/taskRoutes';
 
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 
 const taskIdInput = ref(String(route.params.taskId ?? ''));
-const operatorId = ref(localStorage.getItem('amzgraph.operatorId') ?? 'operator@example.com');
+const operatorId = ref(loadOperatorId());
 const loading = ref(false);
 const exportsLoading = ref(false);
 const auditLoading = ref(false);
@@ -34,56 +40,38 @@ const errorText = ref('');
 const cancelModalVisible = ref(false);
 const cancelTarget = ref<ExportPackageResponse | null>(null);
 const cancelReason = ref('');
+const selectedExportPackageId = ref('');
 
 const filters = reactive({
   format: null as string | null,
-  status: null as string | null,
-  page: 1,
-  size: 10
+  status: null as string | null
 });
 
-const exportPage = reactive({
-  totalItems: 0,
-  totalPages: 0
-});
-
-const auditPage = reactive({
-  page: 1,
-  size: 10,
-  totalItems: 0,
-  totalPages: 0
-});
-
-const formatOptions = [
-  { label: '全部格式', value: '' },
-  { label: 'ZIP', value: 'ZIP' },
-  { label: 'Markdown', value: 'MARKDOWN' },
-  { label: 'Excel', value: 'EXCEL' },
-  { label: 'Word', value: 'WORD' }
-];
-
-const statusOptions = [
-  { label: '全部状态', value: '' },
-  { label: 'PENDING', value: 'PENDING' },
-  { label: 'RUNNING', value: 'RUNNING' },
-  { label: 'SUCCEEDED', value: 'SUCCEEDED' },
-  { label: 'FAILED', value: 'FAILED' },
-  { label: 'CANCELED', value: 'CANCELED' }
-];
+const exportPagination = createPaginationState();
+const auditPagination = createPaginationState();
 
 const currentTaskId = computed(() => String(route.params.taskId ?? ''));
-
-function statusType(status: string) {
-  if (status === 'SUCCEEDED') return 'success';
-  if (status === 'FAILED') return 'error';
-  if (status === 'CANCELED') return 'warning';
-  if (status === 'RUNNING') return 'info';
-  return 'default';
-}
-
-function displayTime(value?: string | null) {
-  return value ? value.replace('T', ' ').slice(0, 19) : '-';
-}
+const selectedExportPackage = computed(() =>
+  exportsData.value.find((item) => item.exportPackageId === selectedExportPackageId.value) ?? exportsData.value[0] ?? null
+);
+const exportStatusSummary = computed(() => {
+  const summary = {
+    total: exportsData.value.length,
+    pending: 0,
+    running: 0,
+    succeeded: 0,
+    failed: 0,
+    canceled: 0
+  };
+  exportsData.value.forEach((item) => {
+    if (item.status === 'PENDING') summary.pending += 1;
+    if (item.status === 'RUNNING') summary.running += 1;
+    if (item.status === 'SUCCEEDED') summary.succeeded += 1;
+    if (item.status === 'FAILED') summary.failed += 1;
+    if (item.status === 'CANCELED') summary.canceled += 1;
+  });
+  return summary;
+});
 
 async function loadTask() {
   task.value = await getTaskDetail(currentTaskId.value);
@@ -95,12 +83,12 @@ async function loadExports() {
     const page = await listExportPackages(currentTaskId.value, {
       format: filters.format,
       status: filters.status,
-      page: filters.page - 1,
-      size: filters.size
+      page: requestPage(exportPagination.page),
+      size: exportPagination.size
     });
     exportsData.value = page.items;
-    exportPage.totalItems = page.totalItems;
-    exportPage.totalPages = page.totalPages;
+    selectedExportPackageId.value = page.items[0]?.exportPackageId ?? '';
+    syncPagination(exportPagination, page);
   } finally {
     exportsLoading.value = false;
   }
@@ -109,10 +97,13 @@ async function loadExports() {
 async function loadAuditLogs() {
   auditLoading.value = true;
   try {
-    const page = await listAuditLogs(currentTaskId.value, auditPage.page - 1, auditPage.size);
+    const page = await listAuditLogs({
+      taskId: currentTaskId.value,
+      page: requestPage(auditPagination.page),
+      size: auditPagination.size
+    });
     auditLogs.value = page.items;
-    auditPage.totalItems = page.totalItems;
-    auditPage.totalPages = page.totalPages;
+    syncPagination(auditPagination, page);
   } finally {
     auditLoading.value = false;
   }
@@ -124,16 +115,26 @@ async function refreshAll() {
   try {
     await Promise.all([loadTask(), loadExports(), loadAuditLogs()]);
   } catch (error) {
-    errorText.value = error instanceof Error ? error.message : '加载失败';
+    errorText.value = errorMessage(error, '加载失败');
   } finally {
     loading.value = false;
   }
 }
 
+function resetExportPageAndLoad() {
+  resetPaginationPage(exportPagination);
+  loadExports();
+}
+
+function resetAuditPageAndLoad() {
+  resetPaginationPage(auditPagination);
+  loadAuditLogs();
+}
+
 function openTask() {
   const value = taskIdInput.value.trim();
   if (value && value !== currentTaskId.value) {
-    router.push(`/tasks/${encodeURIComponent(value)}/export`);
+    router.push(taskSubPath(value, 'export'));
   }
 }
 
@@ -144,7 +145,7 @@ async function createExport(format: string) {
     await loadExports();
     await loadAuditLogs();
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '创建失败');
+    message.error(errorMessage(error, '创建失败'));
   }
 }
 
@@ -154,7 +155,7 @@ async function runExport(row: ExportPackageResponse) {
     message.success('导出已执行');
     await loadExports();
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '执行失败');
+    message.error(errorMessage(error, '执行失败'));
   }
 }
 
@@ -164,7 +165,7 @@ async function retryExport(row: ExportPackageResponse) {
     message.success('已创建重试导出');
     await loadExports();
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '重试失败');
+    message.error(errorMessage(error, '重试失败'));
   }
 }
 
@@ -174,16 +175,23 @@ function openCancel(row: ExportPackageResponse) {
   cancelModalVisible.value = true;
 }
 
+function displayLink(value?: string | null) {
+  if (!value) {
+    return '-';
+  }
+  return h('a', { href: value, target: '_blank', rel: 'noreferrer' }, value);
+}
+
 async function submitCancel() {
   if (!cancelTarget.value || !cancelReason.value.trim()) {
     message.warning('需要填写取消原因');
     return;
   }
-  localStorage.setItem('amzgraph.operatorId', operatorId.value);
+  const savedOperatorId = saveOperatorId(operatorId.value);
   try {
     await cancelExportPackage(
       cancelTarget.value.exportPackageId,
-      operatorId.value,
+      savedOperatorId,
       cancelReason.value.trim()
     );
     message.success('导出记录已取消');
@@ -191,7 +199,7 @@ async function submitCancel() {
     await loadExports();
     await loadAuditLogs();
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '取消失败');
+    message.error(errorMessage(error, '取消失败'));
   }
 }
 
@@ -203,10 +211,11 @@ const exportColumns: DataTableColumns<ExportPackageResponse> = [
     key: 'status',
     width: 120,
     render(row) {
-      return h(NTag, { type: statusType(row.status), size: 'small' }, { default: () => row.status });
+      return h(NTag, { type: statusTagType(row.status), size: 'small' }, { default: () => row.status });
     }
   },
-  { title: '文件', key: 'fileUrl', ellipsis: { tooltip: true } },
+  { title: '文件', key: 'fileUrl', ellipsis: { tooltip: true }, render(row) { return displayLink(row.fileUrl); } },
+  { title: 'Manifest', key: 'manifestUrl', width: 170, ellipsis: { tooltip: true }, render(row) { return displayLink(row.manifestUrl); } },
   { title: '失败/取消原因', key: 'failureReason', ellipsis: { tooltip: true },
     render(row) { return row.failureReason ?? row.cancelReason ?? '-'; } },
   { title: '更新时间', key: 'updatedAt', width: 170, render(row) { return displayTime(row.updatedAt); } },
@@ -224,7 +233,8 @@ const exportColumns: DataTableColumns<ExportPackageResponse> = [
           : null,
         row.status === 'FAILED'
           ? h(NButton, { size: 'small', type: 'warning', onClick: () => retryExport(row) }, { default: () => '重试' })
-          : null
+          : null,
+        h(NButton, { size: 'small', onClick: () => { selectedExportPackageId.value = row.exportPackageId; } }, { default: () => '详情' })
       ]);
     }
   }
@@ -295,6 +305,47 @@ onMounted(refreshAll);
         </n-grid>
       </n-spin>
 
+      <n-card title="导出状态摘要">
+        <n-grid :cols="6" :x-gap="12" :y-gap="12" responsive="screen">
+          <n-gi>
+            <div class="status-tile">
+              <span>当前页总数</span>
+              <strong>{{ exportStatusSummary.total }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="status-tile">
+              <span>PENDING</span>
+              <strong>{{ exportStatusSummary.pending }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="status-tile">
+              <span>RUNNING</span>
+              <strong>{{ exportStatusSummary.running }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="status-tile">
+              <span>SUCCEEDED</span>
+              <strong>{{ exportStatusSummary.succeeded }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="status-tile">
+              <span>FAILED</span>
+              <strong>{{ exportStatusSummary.failed }}</strong>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="status-tile">
+              <span>CANCELED</span>
+              <strong>{{ exportStatusSummary.canceled }}</strong>
+            </div>
+          </n-gi>
+        </n-grid>
+      </n-card>
+
       <n-card title="导出历史">
         <n-space vertical>
           <div class="toolbar">
@@ -302,15 +353,15 @@ onMounted(refreshAll);
               v-model:value="filters.format"
               class="toolbar-field"
               clearable
-              :options="formatOptions"
-              @update:value="filters.page = 1; loadExports()"
+              :options="exportFormatOptions"
+              @update:value="resetExportPageAndLoad"
             />
             <n-select
               v-model:value="filters.status"
               class="toolbar-field"
               clearable
-              :options="statusOptions"
-              @update:value="filters.page = 1; loadExports()"
+              :options="exportStatusOptions"
+              @update:value="resetExportPageAndLoad"
             />
             <n-button @click="createExport('ZIP')">创建 ZIP</n-button>
             <n-button @click="createExport('MARKDOWN')">创建 Markdown</n-button>
@@ -322,16 +373,84 @@ onMounted(refreshAll);
             :data="exportsData"
             :loading="exportsLoading"
             :bordered="false"
+            :empty-description="'暂无导出记录'"
           />
           <n-pagination
-            v-model:page="filters.page"
-            v-model:page-size="filters.size"
-            :item-count="exportPage.totalItems"
+            v-model:page="exportPagination.page"
+            v-model:page-size="exportPagination.size"
+            :item-count="exportPagination.totalItems"
             show-size-picker
             :page-sizes="[10, 20, 50]"
             @update:page="loadExports"
-            @update:page-size="filters.page = 1; loadExports()"
+            @update:page-size="resetExportPageAndLoad"
           />
+        </n-space>
+      </n-card>
+
+      <n-card title="导出详情">
+        <n-empty v-if="!selectedExportPackage" description="暂无导出记录" />
+        <n-space v-else vertical size="large">
+          <n-descriptions :column="2" bordered label-placement="left">
+            <n-descriptions-item label="导出包">
+              <n-text class="mono">{{ selectedExportPackage.exportPackageId }}</n-text>
+            </n-descriptions-item>
+            <n-descriptions-item label="格式">{{ selectedExportPackage.format }}</n-descriptions-item>
+            <n-descriptions-item label="状态">
+              <n-tag :type="statusTagType(selectedExportPackage.status)" size="small">
+                {{ selectedExportPackage.status }}
+              </n-tag>
+            </n-descriptions-item>
+            <n-descriptions-item label="任务 ID">
+              <n-text class="mono">{{ selectedExportPackage.taskId }}</n-text>
+            </n-descriptions-item>
+            <n-descriptions-item label="文件">
+              <a v-if="selectedExportPackage.fileUrl" :href="selectedExportPackage.fileUrl" target="_blank" rel="noreferrer">
+                {{ selectedExportPackage.fileUrl }}
+              </a>
+              <span v-else>-</span>
+            </n-descriptions-item>
+            <n-descriptions-item label="Manifest">
+              <a v-if="selectedExportPackage.manifestUrl" :href="selectedExportPackage.manifestUrl" target="_blank" rel="noreferrer">
+                {{ selectedExportPackage.manifestUrl }}
+              </a>
+              <span v-else>-</span>
+            </n-descriptions-item>
+            <n-descriptions-item label="失败原因">
+              {{ selectedExportPackage.failureReason ?? '-' }}
+            </n-descriptions-item>
+            <n-descriptions-item label="取消原因">
+              {{ selectedExportPackage.cancelReason ?? '-' }}
+            </n-descriptions-item>
+            <n-descriptions-item label="取消人">
+              {{ selectedExportPackage.canceledBy ?? '-' }}
+            </n-descriptions-item>
+            <n-descriptions-item label="取消时间">
+              {{ displayTime(selectedExportPackage.canceledAt) }}
+            </n-descriptions-item>
+            <n-descriptions-item label="创建时间">
+              {{ displayTime(selectedExportPackage.createdAt) }}
+            </n-descriptions-item>
+            <n-descriptions-item label="开始时间">
+              {{ displayTime(selectedExportPackage.startedAt) }}
+            </n-descriptions-item>
+            <n-descriptions-item label="更新时间">
+              {{ displayTime(selectedExportPackage.updatedAt) }}
+            </n-descriptions-item>
+          </n-descriptions>
+
+          <n-thing title="包含资产">
+            <n-space v-if="selectedExportPackage.includedAssetIds.length">
+              <n-tag
+                v-for="assetId in selectedExportPackage.includedAssetIds"
+                :key="assetId"
+                class="mono"
+                size="small"
+              >
+                {{ assetId }}
+              </n-tag>
+            </n-space>
+            <n-empty v-else description="暂无资产 ID" />
+          </n-thing>
         </n-space>
       </n-card>
 
@@ -342,15 +461,16 @@ onMounted(refreshAll);
             :data="auditLogs"
             :loading="auditLoading"
             :bordered="false"
+            :empty-description="'暂无审计日志'"
           />
           <n-pagination
-            v-model:page="auditPage.page"
-            v-model:page-size="auditPage.size"
-            :item-count="auditPage.totalItems"
+            v-model:page="auditPagination.page"
+            v-model:page-size="auditPagination.size"
+            :item-count="auditPagination.totalItems"
             show-size-picker
             :page-sizes="[10, 20, 50]"
             @update:page="loadAuditLogs"
-            @update:page-size="auditPage.page = 1; loadAuditLogs()"
+            @update:page-size="resetAuditPageAndLoad"
           />
         </n-space>
       </n-card>

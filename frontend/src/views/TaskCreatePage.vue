@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router';
 import type { UploadFileInfo } from 'naive-ui';
 import { useMessage } from 'naive-ui';
 import { submitListingTask } from '../api/client';
+import { errorMessage } from '../utils/display';
+import { taskListPath, taskSubPath } from '../utils/taskRoutes';
 
 const router = useRouter();
 const message = useMessage();
@@ -65,9 +67,9 @@ async function submitTask() {
       language: language.value || 'en-US'
     });
     message.success('任务已创建');
-    router.push(`/tasks/${encodeURIComponent(response.taskId)}/export`);
+    router.push(taskSubPath(response.taskId, 'export'));
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '创建任务失败');
+    message.error(errorMessage(error, '创建任务失败'));
   } finally {
     submitting.value = false;
   }
@@ -125,7 +127,7 @@ async function submitTask() {
         </n-form-item>
 
         <n-space justify="end">
-          <n-button @click="router.push('/tasks')">返回列表</n-button>
+          <n-button @click="router.push(taskListPath())">返回列表</n-button>
           <n-button type="primary" :loading="submitting" @click="submitTask">提交任务</n-button>
         </n-space>
       </n-space>

@@ -5,95 +5,84 @@ import type { DataTableColumns } from 'naive-ui';
 import { NButton, NTag, useMessage } from 'naive-ui';
 import { listTasks } from '../api/client';
 import type { ListingTaskSummaryResponse } from '../api/types';
+import { displayTime, errorMessage } from '../utils/display';
+import { categoryOptions, marketplaceOptions, taskStatusOptions } from '../utils/options';
+import { createPaginationState, requestPage, resetPaginationPage, syncPagination } from '../utils/pagination';
+import { statusTagType } from '../utils/status';
+import { taskCreatePath, taskDetailPath, taskSubPath } from '../utils/taskRoutes';
 
 const router = useRouter();
 const message = useMessage();
 const loading = ref(false);
 const tasks = ref<ListingTaskSummaryResponse[]>([]);
+const errorText = ref('');
 
 const filters = reactive({
   status: null as string | null,
   marketplace: 'US' as string | null,
-  categoryCode: 'CAR_STEREO' as string | null,
-  page: 1,
-  size: 10
+  categoryCode: 'CAR_STEREO' as string | null
 });
 
-const pageState = reactive({
-  totalItems: 0,
-  totalPages: 0
-});
-
-const statusOptions = [
-  { label: '全部状态', value: '' },
-  { label: 'WAIT_BRIEF_APPROVE', value: 'WAIT_BRIEF_APPROVE' },
-  { label: 'GENERATING', value: 'GENERATING' },
-  { label: 'WAIT_FINAL_APPROVE', value: 'WAIT_FINAL_APPROVE' },
-  { label: 'COMPLETED', value: 'COMPLETED' },
-  { label: 'FAILED', value: 'FAILED' },
-  { label: 'CANCELLED', value: 'CANCELLED' }
-];
-
-const marketplaceOptions = [
-  { label: '全部站点', value: '' },
-  { label: 'US', value: 'US' },
-  { label: 'UK', value: 'UK' }
-];
-
-const categoryOptions = [
-  { label: '全部类目', value: '' },
-  { label: 'CAR_STEREO', value: 'CAR_STEREO' }
-];
-
-function statusType(status: string) {
-  if (status === 'COMPLETED') return 'success';
-  if (status === 'FAILED') return 'error';
-  if (status === 'WAIT_FINAL_APPROVE') return 'warning';
-  if (status === 'GENERATING') return 'info';
-  return 'default';
-}
-
-function displayTime(value?: string | null) {
-  return value ? value.replace('T', ' ').slice(0, 19) : '-';
-}
+const pagination = createPaginationState();
 
 async function loadTasks() {
   loading.value = true;
+  errorText.value = '';
   try {
     const page = await listTasks({
       status: filters.status,
       marketplace: filters.marketplace,
       categoryCode: filters.categoryCode,
-      page: filters.page - 1,
-      size: filters.size
+      page: requestPage(pagination.page),
+      size: pagination.size
     });
     tasks.value = page.items;
-    pageState.totalItems = page.totalItems;
-    pageState.totalPages = page.totalPages;
+    syncPagination(pagination, page);
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '任务列表加载失败');
+    errorText.value = errorMessage(error, '任务列表加载失败');
+    message.error(errorText.value);
   } finally {
     loading.value = false;
   }
 }
 
 function resetPageAndLoad() {
-  filters.page = 1;
+  resetPaginationPage(pagination);
   loadTasks();
 }
 
 function openExport(taskId: string) {
-  router.push(`/tasks/${encodeURIComponent(taskId)}/export`);
+  router.push(taskSubPath(taskId, 'export'));
+}
+
+function openDetail(taskId: string) {
+  router.push(taskDetailPath(taskId));
+}
+
+function rowKey(row: ListingTaskSummaryResponse) {
+  return row.taskId;
 }
 
 const columns: DataTableColumns<ListingTaskSummaryResponse> = [
-  { title: '任务 ID', key: 'taskId', width: 220, ellipsis: { tooltip: true } },
+  {
+    title: '任务 ID',
+    key: 'taskId',
+    width: 220,
+    ellipsis: { tooltip: true },
+    render(row) {
+      return h(
+        NButton,
+        { text: true, type: 'primary', onClick: () => openDetail(row.taskId) },
+        { default: () => row.taskId }
+      );
+    }
+  },
   {
     title: '主状态',
     key: 'status',
     width: 170,
     render(row) {
-      return h(NTag, { type: statusType(row.status), size: 'small' }, { default: () => row.status });
+      return h(NTag, { type: statusTagType(row.status), size: 'small' }, { default: () => row.status });
     }
   },
   { title: 'Brief', key: 'briefStatus', width: 140 },
@@ -123,12 +112,12 @@ onMounted(loadTasks);
       <n-card title="任务列表">
         <n-space vertical>
           <div class="toolbar">
-            <n-button type="primary" @click="router.push('/tasks/new')">创建任务</n-button>
+            <n-button type="primary" @click="router.push(taskCreatePath())">创建任务</n-button>
             <n-select
               v-model:value="filters.status"
               class="toolbar-field"
               clearable
-              :options="statusOptions"
+              :options="taskStatusOptions"
               @update:value="resetPageAndLoad"
             />
             <n-select
@@ -147,20 +136,25 @@ onMounted(loadTasks);
             />
             <n-button :loading="loading" @click="loadTasks">刷新</n-button>
           </div>
+          <n-alert v-if="errorText" type="error">{{ errorText }}</n-alert>
           <n-data-table
             :columns="columns"
             :data="tasks"
             :loading="loading"
             :bordered="false"
+            remote
+            :row-key="rowKey"
+            :pagination="false"
+            :empty-description="'暂无任务'"
           />
           <n-pagination
-            v-model:page="filters.page"
-            v-model:page-size="filters.size"
-            :item-count="pageState.totalItems"
+            v-model:page="pagination.page"
+            v-model:page-size="pagination.size"
+            :item-count="pagination.totalItems"
             show-size-picker
             :page-sizes="[10, 20, 50]"
             @update:page="loadTasks"
-            @update:page-size="filters.page = 1; loadTasks()"
+            @update:page-size="resetPageAndLoad"
           />
         </n-space>
       </n-card>
